@@ -1,6 +1,7 @@
 const W3CWebSocket = require('websocket').w3cwebsocket;
 global.WebSocket = W3CWebSocket;
 const yargs = require('yargs');
+const {default: SimpleMPClient} = require('../dist/client');
 
 const kwargs = yargs
     .usage('Usage: $0 [OPTIONS]')
@@ -23,7 +24,6 @@ async function main(kwargs) {
     url,
     topic,
   } = kwargs;
-  const {default: SimpleMPClient} = await import('../src/client.mjs');
   const client = new SimpleMPClient(url);
   try {
     await client.publish(topic, {test: 'payload'});

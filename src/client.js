@@ -1,4 +1,6 @@
-import {TYPE, FIELD} from './constants.mjs';
+import {PubSub, ReqResp} from '@lannuttia/telegram';
+
+import {TYPE, FIELD} from './constants';
 
 export default class SimpleMPClient {
   constructor(url) {
@@ -8,25 +10,17 @@ export default class SimpleMPClient {
       for (let idx=this._onopenCallbacks.length - 1; idx >= 0; idx--) {
         this._onopenCallbacks.pop()();
       }
-    }
-    this._subscriptions = new Map();
-    this._requests = new Map();
+    };
+    this._pubsub = new PubSub();
+    this._reqresp = new ReqResp();
     this._connection.onmessage = (event) => {
       const payload = JSON.parse(event.data);
       const topic = payload.topic;
-      if (
-        'sequence' in payload
-        && this._requests.has(topic)
-      ) {
-      } else if (
-        !('sequence' in payload)
-        && this._subscriptions.has(topic)
-      ) {
-        this._subscriptions.get(topic).forEach((cb) => cb(payload.content));
+      if ( 'sequence' in payload) {
       } else {
-        console.warn('No recognized way to handle message:', payload);
+        this._pubsub.publish(topic, payload.content);
       }
-    }
+    };
   }
 
   get connection() {
@@ -43,7 +37,7 @@ export default class SimpleMPClient {
     const message = _createMessage(TYPE.PUBLICATION, topic, {content});
     try {
       await this.connection;
-      this._connection.send(JSON.stringify(message));
+      this._send(message);
       return;
     } catch (error) {
       throw error;
@@ -54,16 +48,27 @@ export default class SimpleMPClient {
     const message = _createMessage(TYPE.SUBSCRIPTION, topic);
     try {
       await this.connection;
-      this._connection.send(JSON.stringify(message));
-      if (this._subscriptions.has(topic)) {
-        this._subscriptions.get(topic).push(callback);
-      } else {
-        this._subscriptions.set(topic, [callback]);
-      }
+      this._send(message);
+      this._pubsub.subscribe(topic, this, callback);
       return;
     } catch (error) {
       throw error;
     }
+  }
+
+  async unsubscribe(topic) {
+    const message = _createMessage(TYPE.UNSUBSCRIPTION, topic);
+    try {
+      await this.connection;
+      this._send(message);
+      this._pubsub.unsubscribe(topic, this);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  _send(data) {
+    return this._connection.send(JSON.stringify(data));
   }
 }
 
@@ -80,5 +85,5 @@ function _createMessage(type, topic, kwargs={}) {
     message[FIELD.CONTENT] = kwargs.content;
   }
 
-  return message
+  return message;
 }
